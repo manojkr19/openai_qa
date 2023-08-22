@@ -1,48 +1,62 @@
-import pandas as pd
+import numpy as np
+import tensorflow as tf
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler, OneHotEncoder
-from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline
-from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, f1_score
+from sklearn.ensemble import RandomForestClassifier
+import xgboost as xgb
 
-# Sample data
-data = pd.DataFrame({
-    'client_id': [1, 2, 1, 3],
-    'sector': ['Tech', 'Health', 'Tech', 'Finance'],
-    'rating': ['buy', 'sell', 'hold', 'buy'],
-    'prev_rating': ['hold', 'buy', 'sell', 'hold'],
-    'price': [150, 120, 130, 140],
-    'prev_price': [140, 125, 135, 130],
-    'traded': [1, 0, 1, 0]
-})
+# Generate synthetic data
+np.random.seed(42)
+X = np.random.randn(1000, 10)
+Y = (np.sum(X, axis=1) + np.random.randn(1000) > 0).astype(int)
 
-# Features and target
-X = data.drop('traded', axis=1)
-y = data['traded']
+# Split the data
+X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.2, random_state=42)
 
-# Split data
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+# Define models and their configurations
+models = [
+    {
+        'name': 'Logistic Regression',
+        'model': tf.keras.Sequential([tf.keras.layers.Dense(1, input_dim=10, activation='sigmoid')]),
+        'fit': lambda model, X, Y: model.compile(optimizer='adam', loss='binary_crossentropy') or model.fit(X, Y, epochs=50, batch_size=10, verbose=0),
+        'predict': lambda model, X: (model.predict(X) > 0.5).astype(int)
+    },
+    {
+        'name': 'Neural Network',
+        'model': tf.keras.Sequential([
+            tf.keras.layers.Dense(64, input_dim=10, activation='relu'),
+            tf.keras.layers.Dense(32, activation='relu'),
+            tf.keras.layers.Dense(1, activation='sigmoid')
+        ]),
+        'fit': lambda model, X, Y: model.compile(optimizer='adam', loss='binary_crossentropy') or model.fit(X, Y, epochs=50, batch_size=10, verbose=0),
+        'predict': lambda model, X: (model.predict(X) > 0.5).astype(int)
+    },
+    {
+        'name': 'XGBoost',
+        'model': xgb.XGBClassifier(),
+        'fit': lambda model, X, Y: model.fit(X, Y),
+        'predict': lambda model, X: model.predict(X)
+    },
+    {
+        'name': 'RandomForest',
+        'model': RandomForestClassifier(),
+        'fit': lambda model, X, Y: model.fit(X, Y),
+        'predict': lambda model, X: model.predict(X)
+    }
+]
 
-# Preprocessing
-numeric_features = ['price', 'prev_price']
-numeric_transformer = StandardScaler()
+# Iterate over models and print their performance
+for model_config in models:
+    model = model_config['model']
+    model_config['fit'](model, X_train, Y_train)
+    
+    Y_pred = model_config['predict'](model, X_test)
+    accuracy = accuracy_score(Y_test, Y_pred)
+    f1 = f1_score(Y_test, Y_pred)
+    
+    print(f"Model: {model_config['name']}")
+    print(f"Accuracy: {accuracy * 100:.2f}%")
+    print(f"F1 Score: {f1:.2f}")
+    print("-" * 50)
 
-categorical_features = ['client_id', 'sector', 'rating', 'prev_rating']
-categorical_transformer = OneHotEncoder(drop='first')
-
-preprocessor = ColumnTransformer(
-    transformers=[
-        ('num', numeric_transformer, numeric_features),
-        ('cat', categorical_transformer, categorical_features)
-    ])
-
-# Model
-model = Pipeline(steps=[('preprocessor', preprocessor),
-                        ('classifier', LogisticRegression())])
-
-model.fit(X_train, y_train)
-y_pred = model.predict(X_test)
-
-print(f"Accuracy: {accuracy_score(y_test, y_pred) * 100:.2f}%")
-print(f"F1 Score: {f1_score(y_test, y_pred):.2f}")
+# Based on the printed results, you can pick the model with the highest accuracy and F1 score.
