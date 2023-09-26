@@ -1,7 +1,9 @@
 import pandas as pd
-import plotly.graph_objects as go
-import ipywidgets as widgets
-from IPython.display import display
+from bokeh.models import ColumnDataSource, Plot, Range1d, MultiLine, Circle, HoverTool, TapTool, BoxSelectTool
+from bokeh.models.widgets import Dropdown
+from bokeh.layouts import column
+from bokeh.plotting import show, output_notebook, figure
+from bokeh.io import push_notebook
 
 # Sample Data
 data = {
@@ -11,41 +13,50 @@ data = {
 }
 df = pd.DataFrame(data)
 
-# Function to draw the Sankey chart for a selected node
+# Initialize Bokeh output to notebook
+output_notebook()
+
+# Drawing the Sankey chart for a selected node
 def draw_sankey(node_name=None):
     if node_name:
         filtered_df = df[(df['source'] == node_name) | (df['target'] == node_name)]
     else:
         filtered_df = df
 
-    label_list = list(pd.concat([filtered_df['source'], filtered_df['target']]).unique())
-    fig = go.Figure(data=[go.Sankey(
-        node=dict(
-            pad=15,
-            thickness=20,
-            line=dict(color="black", width=0.5),
-            label=label_list,
-        ),
-        link=dict(
-            source=filtered_df['source'].apply(lambda x: label_list.index(x)),
-            target=filtered_df['target'].apply(lambda x: label_list.index(x)),
-            value=filtered_df['value']
-        )
-    )])
-    
-    if node_name:
-        fig.update_layout(title_text=f"Sankey Diagram for Node {node_name}", font_size=10)
-    else:
-        fig.update_layout(title_text="Full Sankey Diagram", font_size=10)
-        
-    fig.show()
+    # Bokeh doesn't have built-in Sankey functionality, so we simulate using multiline for connections.
+    # For simplicity, we just represent nodes as circles and connections as lines between them.
+    plot = figure(width=600, height=400, title=f"Sankey Diagram for Node {node_name}" if node_name else "Full Sankey Diagram", 
+                  tools="pan,box_zoom,reset", toolbar_location="right")
 
-# Dropdown widget
-node_dropdown = widgets.Dropdown(
-    options=[('All', None)] + [(node, node) for node in pd.concat([df['source'], df['target']]).unique()],
-    value=None,
-    description='Node:'
-)
+    # Define nodes and positions (for simplicity, just positioning nodes in a linear fashion)
+    nodes = list(pd.concat([df['source'], df['target']]).unique())
+    nodes_x = list(range(len(nodes)))
+    nodes_y = [1] * len(nodes)
 
-# Display the widget and interactivity
-widgets.interactive(draw_sankey, node_name=node_dropdown)
+    # Draw lines for connections
+    lines_x = []
+    lines_y = []
+    for _, row in filtered_df.iterrows():
+        lines_x.append([nodes_x[nodes.index(row['source'])], nodes_x[nodes.index(row['target'])]])
+        lines_y.append([1, 1])
+
+    plot.multi_line(lines_x, lines_y, color="green", line_width=2)
+
+    # Draw nodes
+    plot.circle(nodes_x, nodes_y, size=20, color="blue", alpha=0.5)
+
+    handle = show(plot, notebook_handle=True)
+    push_notebook(handle=handle)
+
+# Using Bokeh's Dropdown widget to select nodes
+def update(attr, old, new):
+    draw_sankey(node_dropdown.value)
+
+node_list = ["All"] + list(pd.concat([df['source'], df['target']]).unique())
+node_dropdown = Dropdown(label="Select Node", button_type="warning", menu=node_list)
+node_dropdown.on_change('value', update)
+
+show(column(node_dropdown))
+
+# Display initial Sankey diagram
+draw_sankey()
