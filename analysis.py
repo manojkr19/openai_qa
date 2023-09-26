@@ -1,43 +1,51 @@
 import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-from scipy.stats import chi2_contingency, ttest_ind
+import plotly.graph_objects as go
+import ipywidgets as widgets
+from IPython.display import display
 
-# Sample data
-data = pd.DataFrame({
-    'client_id': [1, 2, 1, 3, 2, 3, 1, 2],
-    'sector': ['Tech', 'Health', 'Tech', 'Finance', 'Tech', 'Health', 'Finance', 'Finance'],
-    'rating': ['buy', 'sell', 'hold', 'buy', 'buy', 'sell', 'hold', 'buy'],
-    'prev_rating': ['hold', 'buy', 'sell', 'hold', 'hold', 'buy', 'sell', 'hold'],
-    'price': [150, 120, 130, 140, 155, 118, 135, 142],
-    'prev_price': [140, 125, 135, 130, 150, 120, 130, 138],
-    'traded': [1, 0, 1, 0, 1, 0, 1, 0]
-})
+# Sample Data
+data = {
+    'source': ['A', 'B', 'A', 'C', 'C', 'D'],
+    'target': ['B', 'C', 'D', 'D', 'E', 'E'],
+    'value': [10, 5, 15, 5, 20, 10]
+}
+df = pd.DataFrame(data)
 
-# Correlation Analysis
-numeric_features = ['price', 'prev_price']
-correlations = data[numeric_features].corrwith(data['traded'])
-print("Correlations:\n", correlations)
+# Function to draw the Sankey chart for a selected node
+def draw_sankey(node_name=None):
+    if node_name:
+        filtered_df = df[(df['source'] == node_name) | (df['target'] == node_name)]
+    else:
+        filtered_df = df
 
-# Visual Analysis
-for feature in ['sector', 'rating', 'prev_rating']:
-    plt.figure(figsize=(10, 6))
-    sns.countplot(data=data, x=feature, hue='traded')
-    plt.title(f"Trade Distribution by {feature}")
-    plt.show()
+    label_list = list(pd.concat([filtered_df['source'], filtered_df['target']]).unique())
+    fig = go.Figure(data=[go.Sankey(
+        node=dict(
+            pad=15,
+            thickness=20,
+            line=dict(color="black", width=0.5),
+            label=label_list,
+        ),
+        link=dict(
+            source=filtered_df['source'].apply(lambda x: label_list.index(x)),
+            target=filtered_df['target'].apply(lambda x: label_list.index(x)),
+            value=filtered_df['value']
+        )
+    )])
+    
+    if node_name:
+        fig.update_layout(title_text=f"Sankey Diagram for Node {node_name}", font_size=10)
+    else:
+        fig.update_layout(title_text="Full Sankey Diagram", font_size=10)
+        
+    fig.show()
 
-# Chi-Squared Test for Categorical Features
-for feature in ['sector', 'rating', 'prev_rating']:
-    contingency = pd.crosstab(data[feature], data['traded'])
-    chi2, p, _, _ = chi2_contingency(contingency)
-    print(f"Chi-Squared Test for {feature}:")
-    print(f"Chi2 Value = {chi2}, P-Value = {p}\n")
+# Dropdown widget
+node_dropdown = widgets.Dropdown(
+    options=[('All', None)] + [(node, node) for node in pd.concat([df['source'], df['target']]).unique()],
+    value=None,
+    description='Node:'
+)
 
-# T-Test for Continuous Features
-for feature in numeric_features:
-    group1 = data[data['traded'] == 1][feature]
-    group2 = data[data['traded'] == 0][feature]
-    t_stat, p_val = ttest_ind(group1, group2)
-    print(f"T-Test for {feature}:")
-    print(f"T-Statistic = {t_stat}, P-Value = {p_val}\n")
+# Display the widget and interactivity
+widgets.interactive(draw_sankey, node_name=node_dropdown)
