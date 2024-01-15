@@ -34,30 +34,3 @@ To achieve your objective of optimizing Financial Market Data management, here's
 
 This structured approach ensures a thorough evaluation of the current state, engages key stakeholders, identifies cost-saving opportunities, and implements strategic changes for long-term efficiency and effectiveness.
 
-Based on Murali Pallikonda's self-appraisal and your comments, here's a high-level performance review:
-
----
-
-**Performance Review for Murali Pallikonda**
-
-**Overview:**
-Murali has exhibited remarkable proficiency and initiative in his roles this year. His contributions to both the FastPath project and Cloud PoC have been pivotal. His ability to coordinate complex tasks and his technical expertise have significantly benefited our team's operations and objectives.
-
-**Key Contributions:**
-1. **Project Management and Deployment:** Murali successfully led the deployment of the USSRTP TCH 3.0 upgrade, demonstrating exceptional coordination skills with multiple teams. His management of FastPath releases throughout 2023, ensuring compliance and up-to-date documentation, highlights his meticulous and efficient approach.
-
-2. **Technical Innovations and Solutions:** He resolved long-standing Timeout failures on Hive datasets by innovatively utilizing a new resource pool on Impala. The development of a Splunk Dashboard to monitor these timeouts showcases his proactive approach to problem-solving and continuous improvement.
-
-3. **Testing and Compliance:** Murali's role as FastPath AlT Owner was executed with excellence, handling all compliance tasks effectively. His initiative in upgrading server-side certificates and remediating RC4 dependencies was crucial in maintaining the operational integrity of FastPath.
-
-4. **Cloud PoC and Security:** In the Cloud PoC, Murali played an instrumental role in preparing the threat model and securing necessary approvals, which were critical steps in our cloud journey. His hands-on involvement in the Wandisco PoC testing further illustrates his commitment and technical adaptability.
-
-**Professional Development and Impact:**
-Murali’s ability to seamlessly manage multiple facets of complex projects, coupled with his technical acumen, has not only ensured the smooth functioning of key systems but also contributed to the strategic advancement of our cloud initiatives. His efforts in soliciting support funding and coordinating with various teams demonstrate his strategic thinking and collaboration skills.
-
-**Conclusion:**
-Murali's performance this year has been exemplary. He has played a key role in keeping vital systems operational while also pushing forward new initiatives. His technical expertise, combined with his strategic approach and problem-solving skills, have made him an invaluable asset to our team.
-
----
-
-This review succinctly encapsulates Murali's broad range of contributions, emphasizing both his technical abilities and his strategic impact on important projects.
