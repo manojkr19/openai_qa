@@ -34,3 +34,25 @@ To achieve your objective of optimizing Financial Market Data management, here's
 
 This structured approach ensures a thorough evaluation of the current state, engages key stakeholders, identifies cost-saving opportunities, and implements strategic changes for long-term efficiency and effectiveness.
 
+**Optimizing Financial Market-Data Management: A Governance Perspective**
+
+1. **Governance Framework**
+   - Implementing comprehensive oversight and governance across all market data operations within the banking institution.
+
+2. **Global Market Data Landscape**
+   - Asset Classes: Coverage includes Listed and OTC instruments such as Equities, Credit, Rates, Currencies, Mortgages, etc.
+   - Data Granularity: Time-specific data (Tick data), End-of-Day summaries.
+   - Geographic Reach: Analysis across regions – Americas (AMRS), Europe, Middle East & Africa (EMEA), Asia-Pacific (APAC), and other areas.
+   - Exchange Coverage: Comprehensive inclusion of key exchanges across the aforementioned regions.
+   - Additional Considerations: Invitation for suggestions on other vital dimensions to include.
+
+3. **Data Flow Analysis**
+   - Lineage Tracking: Mapping the entire journey of data from its source to the point of use, ensuring transparency and accountability.
+   - Run Cost Analysis:
+     - Total Cost of Ownership (TCOA) Assessment for each Asset Information Type (AIT).
+     - Determining the overall expenditure for maintaining market data within the bank.
+   - Build Cost Evaluation:
+     - Examining new financial commitments towards Market Data initiatives.
+     - Steering these investments towards strategic and development-focused initiatives. 
+
+[Note: Emphasis should be placed on clarity, conciseness, and professional presentation in the slide design.]
