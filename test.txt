@@ -1,40 +1,145 @@
-Businesses and regulators, despite their differing roles and objectives, share common needs when it comes to data. These needs ensure that data serves its purpose effectively, facilitating smooth operations, compliance, and informed decision-making. Here are the key aspects both entities commonly require from data:
+import duckdb
+import pandas as pd
+from pyvis.network import Network
 
-### 1. **Accuracy and Reliability**
-- **Business Perspective:** Accurate and reliable data is critical for making informed decisions, whether it's for strategic planning, financial forecasting, or customer relationship management.
-- **Regulatory Perspective:** Regulators need accurate data to ensure compliance with laws and regulations, to monitor financial health and operational integrity, and to protect consumer rights.
+def create_network_html(file_path: str, params: dict = None) -> str:
+    # Connect to DuckDB in-memory
+    con = duckdb.connect(database=':memory:')
+    
+    # Create a table from the CSV file
+    con.execute(f"""
+        CREATE TABLE data AS
+        SELECT * FROM read_csv_auto('{file_path}', header=True);
+    """)
 
-### 2. **Completeness**
-- **Business Perspective:** Complete data enables a comprehensive analysis, supports effective decision-making, and ensures that all aspects of a business operation are considered and monitored.
-- **Regulatory Perspective:** Regulators require complete data sets to fully understand the activities and compliance status of a business, ensuring that no crucial information is missing during audits or evaluations.
+    table_name = 'data'
 
-### 3. **Consistency**
-- **Business Perspective:** Consistent data across different departments and systems facilitates smoother operations, reduces errors, and enhances the quality of insights derived from data analysis.
-- **Regulatory Perspective:** Consistent data reporting standards and formats make it easier for regulators to assess and compare information across different entities and time periods.
+    # Extract distinct system nodes
+    df_systems = con.execute(f"""
+        SELECT source_system_id as system_id, source_system_name as system_name, source_system_type as system_type
+        FROM {table_name}
+        UNION
+        SELECT target_system_id as system_id, target_system_name as system_name, target_system_type as system_type
+        FROM {table_name}
+    """).df()
 
-### 4. **Timeliness**
-- **Business Perspective:** Timely access to data helps businesses respond swiftly to market changes, manage operations efficiently, and capitalize on opportunities as they arise.
-- **Regulatory Perspective:** Regulators require timely data submissions to ensure that oversight activities are based on the most current information, allowing for prompt intervention when necessary.
+    # Extract distinct feed nodes
+    df_feeds = con.execute(f"""
+        SELECT DISTINCT feedname
+        FROM {table_name}
+    """).df()
 
-### 5. **Accessibility**
-- **Business Perspective:** Easy access to data empowers employees at all levels to make data-driven decisions, fosters a culture of transparency, and enhances collaboration.
-- **Regulatory Perspective:** Regulators need data to be readily accessible to conduct audits, reviews, and investigations efficiently, ensuring that compliance can be assessed without unnecessary delays.
+    # Edges: source_system -> feed, feed -> target_system
+    df_edges_source_to_feed = con.execute(f"""
+        SELECT DISTINCT source_system_id AS source, feedname AS target 
+        FROM {table_name}
+    """).df()
 
-### 6. **Security and Privacy**
-- **Business Perspective:** Protecting data from unauthorized access and ensuring privacy are paramount to maintain customer trust, protect sensitive information, and mitigate legal and financial risks.
-- **Regulatory Perspective:** Regulators enforce data security and privacy standards to protect consumer information, ensuring that businesses are handling data responsibly and in accordance with legal requirements.
+    df_edges_feed_to_target = con.execute(f"""
+        SELECT DISTINCT feedname AS source, target_system_id AS target
+        FROM {table_name}
+    """).df()
 
-These common requirements underscore the importance of robust data management practices that cater to the needs of both businesses and regulators, facilitating a stable, transparent, and accountable business environment.
+    # Create the network
+    net = Network(notebook=False, directed=True, height="800px", width="100%",select_menu=True)
 
-### Objectives
-1. Evaluate the effectiveness and capabilities of various Data Quality (DQ) tools and frameworks currently in use within the organization.
-2. Assess the current Data Quality practices across all data platforms to identify strengths, gaps, and areas for improvement.
-3. Recommend a strategic Data Quality tool that offers a comprehensive set of capabilities to standardize and enhance the Data Quality processes across the organization.
+    # Add system nodes (shape='dot')
+    system_ids = set()
+    for _, row in df_systems.iterrows():
+        if row['system_id'] not in system_ids:
+            # Determine group from system_type
+            group = row['system_type']
+            net.add_node(
+                row['system_id'],
+                label=row['system_name'],
+                shape='dot',
+                size=30,
+                font={"vadjust": 0},
+                group=group
+            )
+            system_ids.add(row['system_id'])
 
-### Scope
-1. Review and analyze the existing DQ tools and frameworks employed across different departments and projects within the organization.
-2. Conduct a thorough assessment of how Data Quality is managed and maintained on all data platforms, including databases, data lakes, data warehouses, and cloud environments.
-3. Identify and document the current state of Data Quality practices, including profiling, cleansing, validation, monitoring, and governance.
-4. Propose a unified DQ tool or framework that meets the organization’s needs, offering features such as data profiling, cleansing, validation, monitoring, governance, and integration with existing systems.
-5. Develop a strategic plan for the adoption and implementation of the recommended DQ tool, ensuring it aligns with organizational goals and regulatory requirements.
-6. Provide a roadmap for transitioning from current practices to a standardized Data Quality process across the organization, including timelines, training, and support considerations.
+    # Add feed nodes (shape='box')
+    feed_ids = set()
+    for _, row in df_feeds.iterrows():
+        if row['feedname'] not in feed_ids:
+            net.add_node(
+                row['feedname'],
+                label=row['feedname'],
+                shape="box",
+                font={"vadjust": 25},
+                group="feed"
+            )
+            feed_ids.add(row['feedname'])
+
+    # Add edges
+    for _, row in df_edges_source_to_feed.iterrows():
+        net.add_edge(row['source'], row['target'], arrows="to")
+
+    for _, row in df_edges_feed_to_target.iterrows():
+        net.add_edge(row['source'], row['target'], arrows="to")
+
+    # Set hierarchical layout, pastel colors, and cubicBezier edges
+    net.set_options('''
+    {
+      "edges": {
+        "smooth": {
+          "enabled": true,
+          "type": "cubicBezier",
+          "forceDirection": "horizontal",
+          "roundness": 0.5
+        },
+        "arrows": {
+          "to": {
+            "enabled": true,
+            "type": "arrow",
+            "scaleFactor": 0.5
+          }
+        }
+      },
+      "layout": {
+        "hierarchical": {
+          "enabled": true,
+          "direction": "LR",
+          "sortMethod": "directed",
+          "levelSeparation": 200,
+          "nodeSpacing": 200,
+          "treeSpacing": 200
+        }
+      },
+      "groups": {
+        "origin_system": {
+          "color": {
+            "background": "#A7DB8D",
+            "border": "#6FA25D"
+          }
+        },
+        "intermediate_system": {
+          "color": {
+            "background": "#FFF2B8",
+            "border": "#D8C978"
+          }
+        },
+        "final_system": {
+          "color": {
+            "background": "#F9C2D1",
+            "border": "#D693A9"
+          }
+        },
+        "feed": {
+          "color": {
+            "background": "#B8E0F2",
+            "border": "#7AB1CC"
+          }
+        }
+      }
+    }
+    ''')
+
+    # Return the HTML string
+    html_str = net.generate_html()
+    return html_str
+# Example usage:
+html_content = create_network_html('data.csv')
+with open('complex_systems_feeds_circles_spline.html', 'w', encoding='utf-8') as f:
+    f.write(html_content)
