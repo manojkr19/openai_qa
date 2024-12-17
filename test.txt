@@ -3,7 +3,7 @@ import duckdb
 import networkx as nx
 
 def draw_filtered_sankey(lineage_csv, asset_csv, source_filter=None, target_filter=None):
-    # Step 1: Query to fetch nodes, links, and types
+    # Step 1: Query to fetch nodes and links with types
     query_nodes = """
     WITH Nodes AS (
         SELECT DISTINCT
@@ -38,61 +38,55 @@ def draw_filtered_sankey(lineage_csv, asset_csv, source_filter=None, target_filt
     LEFT JOIN 
         read_csv_auto(?) AS tgt ON l.Target_Asset_ID = tgt.Asset_ID;
     """
-    
-    # Step 2: Fetch data from DuckDB
+
+    # Step 2: Fetch data
     conn = duckdb.connect()
     nodes = conn.execute(query_nodes, (lineage_csv, asset_csv, lineage_csv, asset_csv, lineage_csv)).fetchall()
     links = conn.execute(query_links, (lineage_csv, asset_csv, asset_csv)).fetchall()
 
-    # Step 3: Build a graph using NetworkX for filtering
+    # Step 3: Build NetworkX graph for filtering
     G = nx.DiGraph()
     for source, intermediate, target in links:
         G.add_edge(source, intermediate)
         G.add_edge(intermediate, target)
 
-    # Step 4: Apply filtering logic
+    # Step 4: Apply filtering
     filtered_nodes = set()
     filtered_links = []
 
     if source_filter and target_filter:
-        # Find all paths between source and target
         for path in nx.all_simple_paths(G, source=source_filter, target=target_filter):
             for i in range(len(path) - 1):
                 filtered_links.append((path[i], path[i + 1]))
                 filtered_nodes.update(path)
-
     elif source_filter:
-        # BFS outward from source node
         for node in nx.descendants(G, source_filter) | {source_filter}:
             filtered_nodes.add(node)
         for u, v in G.edges():
             if u in filtered_nodes and v in filtered_nodes:
                 filtered_links.append((u, v))
-
     elif target_filter:
-        # Reverse BFS to find all predecessors
         for node in nx.ancestors(G, target_filter) | {target_filter}:
             filtered_nodes.add(node)
         for u, v in G.edges():
             if u in filtered_nodes and v in filtered_nodes:
                 filtered_links.append((u, v))
-
     else:
-        # No filtering; use all nodes and links
         filtered_links = list(G.edges())
         filtered_nodes = set(G.nodes)
 
-    # Step 5: Prepare node and link data for Sankey
+    # Step 5: Prepare node and link data
     node_indices = {node: idx for idx, node in enumerate(filtered_nodes)}
     node_labels = list(filtered_nodes)
     sources = [node_indices[u] for u, v in filtered_links]
     targets = [node_indices[v] for u, v in filtered_links]
-    values = [1] * len(sources)  # Equal weights
+    values = [1] * len(sources)
 
-    # Assign colors to nodes based on type
-    node_colors = [
-        "lightblue" if "(A" in label or "(B" in label else "lightgreen" for label in node_labels
-    ]
+    # Assign colors based on Node_Type
+    node_colors = []
+    for label in node_labels:
+        node_type = next((row[1] for row in nodes if row[0] == label), 'Unknown')
+        node_colors.append('lightblue' if node_type == 'Asset' else 'lightgreen')
 
     # Step 6: Create Sankey diagram
     fig = go.Figure(data=[go.Sankey(
@@ -106,31 +100,24 @@ def draw_filtered_sankey(lineage_csv, asset_csv, source_filter=None, target_filt
             source=sources,
             target=targets,
             value=values,
-            color="rgba(200,200,200,0.6)"
+            color="rgba(200,200,200,0.6)"  # Default gray links
         )
     )])
 
-    # Layout adjustments
+    # Layout
     fig.update_layout(
-        title_text="Filtered Sankey Diagram",
+        title_text="Filtered Sankey Diagram with Colored Nodes",
         font_size=12
     )
 
     fig.show()
 
-# Example usage
+# Example Usage
 lineage_csv = 'lineage_data.csv'
 asset_csv = 'asset_data.csv'
 
-# Filter Examples
-# 1. Show outward flows from a specific source
+# Uncomment one of the below lines to test
 # draw_filtered_sankey(lineage_csv, asset_csv, source_filter='SalesDB (A123)')
-
-# 2. Show all flows leading into a specific target
 # draw_filtered_sankey(lineage_csv, asset_csv, target_filter='AnalyticsDB (B456)')
-
-# 3. Show flows between a specific source and target
 # draw_filtered_sankey(lineage_csv, asset_csv, source_filter='SalesDB (A123)', target_filter='AnalyticsDB (B456)')
-
-# 4. Show full graph (no filters)
 # draw_filtered_sankey(lineage_csv, asset_csv)
