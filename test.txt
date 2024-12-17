@@ -1,8 +1,9 @@
 import plotly.graph_objects as go
 import duckdb
+import networkx as nx
 
-def draw_sankey_with_node_types(lineage_csv, asset_csv):
-    # Step 1: Query to fetch nodes, links, and node types
+def draw_filtered_sankey(lineage_csv, asset_csv, source_filter=None, target_filter=None):
+    # Step 1: Query to fetch nodes, links, and types
     query_nodes = """
     WITH Nodes AS (
         SELECT DISTINCT
@@ -38,29 +39,62 @@ def draw_sankey_with_node_types(lineage_csv, asset_csv):
         read_csv_auto(?) AS tgt ON l.Target_Asset_ID = tgt.Asset_ID;
     """
     
-    # Step 2: Execute the queries
+    # Step 2: Fetch data from DuckDB
     conn = duckdb.connect()
     nodes = conn.execute(query_nodes, (lineage_csv, asset_csv, lineage_csv, asset_csv, lineage_csv)).fetchall()
     links = conn.execute(query_links, (lineage_csv, asset_csv, asset_csv)).fetchall()
 
-    # Step 3: Prepare node and link data
-    node_labels = [row[0] for row in nodes]
-    node_types = [row[1] for row in nodes]
-    node_indices = {label: idx for idx, label in enumerate(node_labels)}
-
-    # Define colors based on node type
-    node_colors = ['lightblue' if node_type == 'Asset' else 'lightgreen' for node_type in node_types]
-
-    # Process links
-    sources = []
-    targets = []
+    # Step 3: Build a graph using NetworkX for filtering
+    G = nx.DiGraph()
     for source, intermediate, target in links:
-        sources.append(node_indices[source])
-        targets.append(node_indices[intermediate])  # Source → Intermediate (Data Feed)
-        sources.append(node_indices[intermediate])
-        targets.append(node_indices[target])        # Intermediate → Target
+        G.add_edge(source, intermediate)
+        G.add_edge(intermediate, target)
 
-    # Step 4: Create the Sankey diagram
+    # Step 4: Apply filtering logic
+    filtered_nodes = set()
+    filtered_links = []
+
+    if source_filter and target_filter:
+        # Find all paths between source and target
+        for path in nx.all_simple_paths(G, source=source_filter, target=target_filter):
+            for i in range(len(path) - 1):
+                filtered_links.append((path[i], path[i + 1]))
+                filtered_nodes.update(path)
+
+    elif source_filter:
+        # BFS outward from source node
+        for node in nx.descendants(G, source_filter) | {source_filter}:
+            filtered_nodes.add(node)
+        for u, v in G.edges():
+            if u in filtered_nodes and v in filtered_nodes:
+                filtered_links.append((u, v))
+
+    elif target_filter:
+        # Reverse BFS to find all predecessors
+        for node in nx.ancestors(G, target_filter) | {target_filter}:
+            filtered_nodes.add(node)
+        for u, v in G.edges():
+            if u in filtered_nodes and v in filtered_nodes:
+                filtered_links.append((u, v))
+
+    else:
+        # No filtering; use all nodes and links
+        filtered_links = list(G.edges())
+        filtered_nodes = set(G.nodes)
+
+    # Step 5: Prepare node and link data for Sankey
+    node_indices = {node: idx for idx, node in enumerate(filtered_nodes)}
+    node_labels = list(filtered_nodes)
+    sources = [node_indices[u] for u, v in filtered_links]
+    targets = [node_indices[v] for u, v in filtered_links]
+    values = [1] * len(sources)  # Equal weights
+
+    # Assign colors to nodes based on type
+    node_colors = [
+        "lightblue" if "(A" in label or "(B" in label else "lightgreen" for label in node_labels
+    ]
+
+    # Step 6: Create Sankey diagram
     fig = go.Figure(data=[go.Sankey(
         node=dict(
             pad=15,
@@ -71,14 +105,14 @@ def draw_sankey_with_node_types(lineage_csv, asset_csv):
         link=dict(
             source=sources,
             target=targets,
-            value=[1] * len(sources),  # Default weight 1 for simplicity
-            color="rgba(200,200,200,0.6)"  # Gray links
+            value=values,
+            color="rgba(200,200,200,0.6)"
         )
     )])
 
     # Layout adjustments
     fig.update_layout(
-        title_text="Sankey Diagram with Node Types and Colors",
+        title_text="Filtered Sankey Diagram",
         font_size=12
     )
 
@@ -87,4 +121,16 @@ def draw_sankey_with_node_types(lineage_csv, asset_csv):
 # Example usage
 lineage_csv = 'lineage_data.csv'
 asset_csv = 'asset_data.csv'
-draw_sankey_with_node_types(lineage_csv, asset_csv)
+
+# Filter Examples
+# 1. Show outward flows from a specific source
+# draw_filtered_sankey(lineage_csv, asset_csv, source_filter='SalesDB (A123)')
+
+# 2. Show all flows leading into a specific target
+# draw_filtered_sankey(lineage_csv, asset_csv, target_filter='AnalyticsDB (B456)')
+
+# 3. Show flows between a specific source and target
+# draw_filtered_sankey(lineage_csv, asset_csv, source_filter='SalesDB (A123)', target_filter='AnalyticsDB (B456)')
+
+# 4. Show full graph (no filters)
+# draw_filtered_sankey(lineage_csv, asset_csv)
