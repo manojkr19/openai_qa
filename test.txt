@@ -1,123 +1,28 @@
-import plotly.graph_objects as go
-import duckdb
-import networkx as nx
+import cx_Oracle
+import pandas as pd
 
-def draw_filtered_sankey(lineage_csv, asset_csv, source_filter=None, target_filter=None):
-    # Step 1: Query to fetch nodes and links with types
-    query_nodes = """
-    WITH Nodes AS (
-        SELECT DISTINCT
-            src.Asset_Name || ' (' || l.Source_Asset_ID || ')' AS Node_Name,
-            'Asset' AS Node_Type
-        FROM read_csv_auto(?) AS l
-        LEFT JOIN read_csv_auto(?) AS src ON l.Source_Asset_ID = src.Asset_ID
-        UNION
-        SELECT DISTINCT
-            tgt.Asset_Name || ' (' || l.Target_Asset_ID || ')' AS Node_Name,
-            'Asset' AS Node_Type
-        FROM read_csv_auto(?) AS l
-        LEFT JOIN read_csv_auto(?) AS tgt ON l.Target_Asset_ID = tgt.Asset_ID
-        UNION
-        SELECT DISTINCT
-            l.Data_Feed_Name AS Node_Name,
-            'Data_Feed' AS Node_Type
-        FROM read_csv_auto(?) AS l
-    )
-    SELECT * FROM Nodes;
-    """
+# Database connection details
+dsn = cx_Oracle.makedsn("hostname", "port", service_name="service_name")
+connection = cx_Oracle.connect(user="your_username", password="your_password", dsn=dsn)
 
-    query_links = """
-    SELECT 
-        src.Asset_Name || ' (' || l.Source_Asset_ID || ')' AS Source_Node,
-        l.Data_Feed_Name AS Intermediate_Node,
-        tgt.Asset_Name || ' (' || l.Target_Asset_ID || ')' AS Target_Node
-    FROM 
-        read_csv_auto(?) AS l
-    LEFT JOIN 
-        read_csv_auto(?) AS src ON l.Source_Asset_ID = src.Asset_ID
-    LEFT JOIN 
-        read_csv_auto(?) AS tgt ON l.Target_Asset_ID = tgt.Asset_ID;
-    """
+# Read the CSV file in chunks
+csv_file = "your_file.csv"
+chunksize = 100000  # Adjust based on your memory and performance
+reader = pd.read_csv(csv_file, chunksize=chunksize)
 
-    # Step 2: Fetch data
-    conn = duckdb.connect()
-    nodes = conn.execute(query_nodes, (lineage_csv, asset_csv, lineage_csv, asset_csv, lineage_csv)).fetchall()
-    links = conn.execute(query_links, (lineage_csv, asset_csv, asset_csv)).fetchall()
+# Prepare the INSERT statement
+table_name = "your_table_name"
+columns = ["col1", "col2", "col3"]  # Replace with your column names
+placeholders = ",".join([":" + str(i + 1) for i in range(len(columns))])
+sql = f"INSERT INTO {table_name} ({','.join(columns)}) VALUES ({placeholders})"
 
-    # Step 3: Build NetworkX graph for filtering
-    G = nx.DiGraph()
-    for source, intermediate, target in links:
-        G.add_edge(source, intermediate)
-        G.add_edge(intermediate, target)
+# Insert data in batches
+cursor = connection.cursor()
+for chunk in reader:
+    data = [tuple(row) for row in chunk.to_numpy()]
+    cursor.executemany(sql, data)
+    connection.commit()
+    print(f"Inserted {len(data)} rows")
 
-    # Step 4: Apply filtering
-    filtered_nodes = set()
-    filtered_links = []
-
-    if source_filter and target_filter:
-        for path in nx.all_simple_paths(G, source=source_filter, target=target_filter):
-            for i in range(len(path) - 1):
-                filtered_links.append((path[i], path[i + 1]))
-                filtered_nodes.update(path)
-    elif source_filter:
-        for node in nx.descendants(G, source_filter) | {source_filter}:
-            filtered_nodes.add(node)
-        for u, v in G.edges():
-            if u in filtered_nodes and v in filtered_nodes:
-                filtered_links.append((u, v))
-    elif target_filter:
-        for node in nx.ancestors(G, target_filter) | {target_filter}:
-            filtered_nodes.add(node)
-        for u, v in G.edges():
-            if u in filtered_nodes and v in filtered_nodes:
-                filtered_links.append((u, v))
-    else:
-        filtered_links = list(G.edges())
-        filtered_nodes = set(G.nodes)
-
-    # Step 5: Prepare node and link data
-    node_indices = {node: idx for idx, node in enumerate(filtered_nodes)}
-    node_labels = list(filtered_nodes)
-    sources = [node_indices[u] for u, v in filtered_links]
-    targets = [node_indices[v] for u, v in filtered_links]
-    values = [1] * len(sources)
-
-    # Assign colors based on Node_Type
-    node_colors = []
-    for label in node_labels:
-        node_type = next((row[1] for row in nodes if row[0] == label), 'Unknown')
-        node_colors.append('lightblue' if node_type == 'Asset' else 'lightgreen')
-
-    # Step 6: Create Sankey diagram
-    fig = go.Figure(data=[go.Sankey(
-        node=dict(
-            pad=15,
-            thickness=20,
-            label=node_labels,
-            color=node_colors
-        ),
-        link=dict(
-            source=sources,
-            target=targets,
-            value=values,
-            color="rgba(200,200,200,0.6)"  # Default gray links
-        )
-    )])
-
-    # Layout
-    fig.update_layout(
-        title_text="Filtered Sankey Diagram with Colored Nodes",
-        font_size=12
-    )
-
-    fig.show()
-
-# Example Usage
-lineage_csv = 'lineage_data.csv'
-asset_csv = 'asset_data.csv'
-
-# Uncomment one of the below lines to test
-# draw_filtered_sankey(lineage_csv, asset_csv, source_filter='SalesDB (A123)')
-# draw_filtered_sankey(lineage_csv, asset_csv, target_filter='AnalyticsDB (B456)')
-# draw_filtered_sankey(lineage_csv, asset_csv, source_filter='SalesDB (A123)', target_filter='AnalyticsDB (B456)')
-# draw_filtered_sankey(lineage_csv, asset_csv)
+cursor.close()
+connection.close()
